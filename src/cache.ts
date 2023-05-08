@@ -10,7 +10,7 @@ export class CacheItem {
     private _value: any;
     private storeDate: Date;
 
-    get key(): any {
+    get key(): string {
         return this._key;
     }
 
@@ -33,9 +33,9 @@ export class Cache {
     /**
      * The key value store (a simple JavaScript object)
      */
-    private _store: Object;
+    private _store: Record<string, CacheItem>;
     /**
-     * Cache expiration intervall in seconds
+     * Cache expiration interval in seconds
      */
     private _cacheExpirationInterval: number;
 
@@ -60,8 +60,8 @@ export class Cache {
         }
     }
 
-    public getCacheItem(key: string): CacheItem {
-        let item = this._store[key];
+    public getCacheItem(key: string): CacheItem | undefined {
+        let item : CacheItem = this._store[key];
 
         // Check expiration
         if (typeof item === 'undefined' || item.isExpired(this._cacheExpirationInterval)) {

@@ -55,7 +55,7 @@ new commits are available.
 
 See [CHANGELOG.md](CHANGELOG.md)
 
-## Licence
+## License
 
 See [LICENSE](LICENSE)
 

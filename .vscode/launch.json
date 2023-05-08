@@ -7,10 +7,12 @@
             "type": "extensionHost",
             "request": "launch",
             "runtimeExecutable": "${execPath}",
-            "args": ["--extensionDevelopmentPath=${workspaceRoot}" ],
-            "stopOnEntry": false,
+            "args": ["--extensionDevelopmentPath=${workspaceRoot}"],
+            /* Property stopOnEntry is not allowed.
+             * "stopOnEntry": false,
+             */
             "sourceMaps": true,
-            "outFiles": [ "${workspaceRoot}/out/src/**/*.js" ],
+            "outFiles": ["${workspaceRoot}/out/src/**/*.js"],
             "preLaunchTask": "npm"
         },
         {
@@ -18,10 +20,15 @@
             "type": "extensionHost",
             "request": "launch",
             "runtimeExecutable": "${execPath}",
-            "args": ["--extensionDevelopmentPath=${workspaceRoot}", "--extensionTestsPath=${workspaceRoot}/out/test" ],
-            "stopOnEntry": false,
+            "args": [
+                "--extensionDevelopmentPath=${workspaceRoot}"   ,
+                "--extensionTestsPath=${workspaceRoot}/out/test"
+            ],
+            /* Property stopOnEntry is not allowed.
+             * "stopOnEntry": false,
+             */
             "sourceMaps": true,
-            "outFiles": [ "${workspaceRoot}/out/test/**/*.js" ],
+            "outFiles": ["${workspaceRoot}/out/test/**/*.js"],
             "preLaunchTask": "npm"
         }
     ]
