@@ -10,5 +10,8 @@
     "markdownlint.config": {
         "MD013": false,
         "MD024": false
+    },
+    "eslint.options": {
+        "overrideConfigFile": "eslint.config.json"
     }
 }
