@@ -19,6 +19,26 @@ interface GitattributesOperation {
     file: GitattributesFile;
 }
 
+interface GitHubData {
+    type: "dir" | "file" | "submodule" | "symlink";
+    size: number;
+    name: string;
+    path: string;
+    content?: string | undefined;
+    sha: string;
+    url: string;
+    git_url: string | null;
+    html_url: string | null;
+    download_url: string | null;
+    _links: GitHubDataLinks[];
+}
+
+export interface GitHubDataLinks {
+    git: string | null;
+    html: string | null;
+    self: string;
+}
+
 export interface GitattributesFile extends vscode.QuickPickItem {
     url: string;
 }
@@ -37,7 +57,7 @@ export class GitattributesRepository {
     public async getFiles(path: string = ''): Promise<GitattributesFile[]> {
         // If cached, return from the cache.
         let item = this.cache.get('gitattributes/' + path);
-        if (typeof item !== 'undefined') {
+        if (item !== undefined) {
             throw new Error("Variable item is type: undefined");
         }
 
@@ -52,14 +72,16 @@ export class GitattributesRepository {
                 }
             });
 
+            const responseData : GitHubData[] = response.data as unknown as GitHubData[];
+
             console.log(`vscode-gitattributes: GitHub API ratelimit remaining:
                 ${response.headers['x-ratelimit-remaining']}`);
 
-            if ((response.data as any).type !== 'dir' || !(response.data as any).entries) {
+            if (!responseData || !responseData.entries) {
                 throw new Error("Response sent wrong type.");
             }
 
-            let files = (response.data as any).entries.filter((file : any) => {
+            let files = responseData.filter((file : any) => {
                 return (file.type === 'file' && file.name !== '.gitattributes' &&
                     file.name.endsWith('.gitattributes'));
             }).map((file : any) => {
