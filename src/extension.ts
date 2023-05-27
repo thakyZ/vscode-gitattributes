@@ -334,8 +334,13 @@ export async function activate(context: vscode.ExtensionContext) : Promise<void>
                 vscode.window.showErrorMessage('No text editor open. Please open a file relative to the workspace to use this command.');
                 throw new CancellationError();
             } else {
-                const workspaceFolder =  vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor!.document.uri);
-                if (!workspaceFolder) {
+                let workspaceFolder : vscode.WorkspaceFolder | undefined;
+                if (vscode.workspace.workspaceFolders.length === 1) {
+                    workspaceFolder = vscode.workspace.workspaceFolders[0]
+                } else {
+                    workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor!.document.uri);
+                }
+                if (workspaceFolder) {
                     var path = workspaceFolder!.uri.fsPath + '/.gitattributes';
                 } else {
                     vscode.window.showErrorMessage('Workspace folder not found. Please open a workspace to use this command.');
