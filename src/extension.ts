@@ -58,7 +58,7 @@ export class GitattributesRepository {
         // If cached, return from the cache.
         let item = this.cache.get('gitattributes/' + path);
         if (item !== undefined) {
-            throw new Error("Variable item is type: undefined");
+            return item;
         }
 
         // Download .gitattributes files from GitHub.
@@ -97,7 +97,7 @@ export class GitattributesRepository {
 
             return files;
         } catch (err: any) {
-            throw err;
+            throw new Error(`${err.code}: ${err.message}`);
         }
     }
 
