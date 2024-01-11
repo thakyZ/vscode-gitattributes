@@ -5,20 +5,22 @@
  * but I had too much fun in implementing it on my own.
  */
 
+import { GitattributesFile } from "./extension";
+
 export class CacheItem {
     private _key: string;
-    private _value: any;
+    private _value: GitattributesFile[];
     private storeDate: Date;
 
     get key(): string {
         return this._key;
     }
 
-    get value(): any {
+    get value(): GitattributesFile[] {
         return this._value;
     }
 
-    constructor(key: string, value: any) {
+    constructor(key: string, value: GitattributesFile[]) {
         this._key = key;
         this._value = value;
         this.storeDate = new Date();
@@ -49,7 +51,7 @@ export class Cache {
     }
 
     public get(key: string) {
-        let item = this._store[key];
+        const item: CacheItem = this._store[key];
 
         // Check expiration
         if (typeof item === 'undefined' || item.isExpired(this._cacheExpirationInterval)) {
@@ -61,7 +63,7 @@ export class Cache {
     }
 
     public getCacheItem(key: string): CacheItem | undefined {
-        let item : CacheItem = this._store[key];
+        const item : CacheItem = this._store[key];
 
         // Check expiration
         if (typeof item === 'undefined' || item.isExpired(this._cacheExpirationInterval)) {
