@@ -1,4 +1,7 @@
 'use strict';
+
+// cSpell:ignore alexkaratarakis, ratelimit, addgitattributes
+
 import * as vscode from 'vscode';
 import { Cache, CacheItem } from './cache';
 import { Octokit } from '@octokit/rest';
@@ -7,6 +10,12 @@ const HttpsProxyAgent = require('https-proxy-agent');
 import * as fs from 'fs/promises';
 
 class CancellationError extends Error { }
+
+interface Bridge {
+    gitattributesRepository: GitattributesRepository | undefined;
+    agent: typeof HttpsProxyAgent | undefined;
+    proxy : string | undefined;
+}
 
 enum OperationType {
     Append,
@@ -20,7 +29,7 @@ interface GitattributesOperation {
 }
 
 interface GitHubData {
-    type: "dir" | "file" | "submodule" | "symlink";
+    type: 'dir' | 'file' | 'submodule' | 'symlink';
     size: number;
     name: string;
     path: string;
@@ -78,7 +87,7 @@ export class GitattributesRepository {
                 ${response.headers['x-ratelimit-remaining']}`);
 
             if (!responseData || !responseData.entries) {
-                throw new Error("Response sent wrong type.");
+                throw new Error('Response sent wrong type.');
             }
 
             let files = responseData.filter((file : any) => {
@@ -125,7 +134,7 @@ export class GitattributesRepository {
             let buffer : Buffer;
 
             if ((response.data as any).type !== 'file' || !(response.data as any).content) {
-                throw new Error("Response sent wrong type.");
+                throw new Error('Response sent wrong type.');
             }
 
             if ((response.data as any).encoding && (response.data as any).encoding === 'base64') {
@@ -156,7 +165,7 @@ export class GitattributesRepository {
 }
 
 /**
- * Remove "* text=auto" if already present.
+ * Remove '* text=auto' if already present.
  */
 async function deduplicate(operation: GitattributesOperation) : Promise<string> {
     let found : boolean = false;
@@ -179,65 +188,83 @@ async function deduplicate(operation: GitattributesOperation) : Promise<string> 
     return newPath;
 }
 
-const userAgent = 'vscode-gitattributes-extension';
+function constructGithubSpace(): Bridge {
+    let client: Octokit | undefined;
+    let gitattributesRepository: GitattributesRepository | undefined;
+    let agent: typeof HttpsProxyAgent | undefined;
+    let debug: boolean | undefined;
+    let httpConfig: vscode.WorkspaceConfiguration | undefined;
+    let proxy : string | undefined;
 
-// Read proxy configuration.
-let httpConfig = vscode.workspace.getConfiguration('http');
-let proxy : string | undefined = httpConfig.get<string>('proxy', '');
+    try {
+        const userAgent = 'vscode-gitattributes-extension';
 
-if (proxy) {
-    console.log(`vscode-gitattributes: using proxy ${proxy}`);
-}
+        // Read proxy configuration.
+        httpConfig = vscode.workspace.getConfiguration('http');
+        proxy = httpConfig.get<string>('proxy', '');
 
-let debug: boolean = false;
-//debug = true;
-
-let auth : string | undefined = vscode.workspace.getConfiguration('gitattributes').get<string>('token');
-
-let options : any | undefined = {
-    userAgent,
-    baseUrl: 'https://api.github.com',
-    log: {
-        debug: (message: string) => {
-            if (debug === true) {
-                console.log(message);
-            }
-        },
-        info: (message: string) => {
-            if (debug === true) {
-                console.log(message);
-            }
-        },
-        warn: (message: string) => {
-            if (debug === true) {
-                console.log(message);
-            }
-        },
-        error: (message: string) => {
-            if (debug === true) {
-                console.log(message);
-            }
+        if (proxy) {
+            console.log(`vscode-gitattributes: using proxy ${proxy}`);
         }
-    },
-    request: {
-        timeout: 100000
-    },
-    proxy: proxy
+
+        debug = false;
+        //debug = true;
+
+        const auth : string | undefined = vscode.workspace.getConfiguration('gitattributes').get<string>('token');
+
+        let options : any | undefined = {
+            userAgent,
+            baseUrl: 'https://api.github.com',
+            log: {
+                debug: (message: string) => {
+                    if (debug === true) {
+                        console.log(message);
+                    }
+                },
+                info: (message: string) => {
+                    if (debug === true) {
+                        console.log(message);
+                    }
+                },
+                warn: (message: string) => {
+                    if (debug === true) {
+                        console.log(message);
+                    }
+                },
+                error: (message: string) => {
+                    if (debug === true) {
+                        console.log(message);
+                    }
+                }
+            },
+            request: {
+                timeout: 100000
+            },
+            proxy: proxy
+        }
+
+        if (typeof auth !== 'undefined' && auth !== '') {
+            options['auth'] = auth;
+        }
+
+        // Create a GitHub API client.
+        client = new Octokit(options);
+
+        // Create a gitattributes repository.
+        gitattributesRepository = new GitattributesRepository(client);
+    } catch (error) {
+        console.log('vscode-gitattributes failed to initialize with error:\n' + error);
+        vscode.window.showErrorMessage('vscode-gitattributes failed to initialize with error:', (error as Error).toString());
+    }
+
+    return {
+        gitattributesRepository: gitattributesRepository,
+        agent: agent,
+        proxy: proxy
+    };
 }
 
-if (typeof auth !== undefined && auth !== '') {
-    options['auth'] = auth;
-}
-
-// Create a GitHub API client.
-let client = new Octokit(options);
-
-// Create a gitattributes repository.
-let gitattributesRepository = new GitattributesRepository(client);
-
-let agent : typeof HttpsProxyAgent;
-
-function getAgent() {
+function getAgent(agent: typeof HttpsProxyAgent, proxy: string | undefined) {
     if (agent) {
         return agent;
     }
@@ -252,7 +279,7 @@ function getAgent() {
     return agent;
 }
 
-function getGitattributesFiles() {
+function getGitattributesFiles(gitattributesRepository: GitattributesRepository) {
     // Get list of .gitattributes files from GitHub.
     return Promise.all([
         gitattributesRepository.getFiles()
@@ -301,8 +328,8 @@ async function getOperation(path : string, file: GitattributesFile) : Promise<Gi
             const value : GitattributesOperation = { path: path, file: file, type: OperationType[operation.label as keyof typeof OperationType] };
             return value;
         });
-    } catch (err : any | undefined) {
-        if (err) {
+    } catch (error : any | undefined) {
+        if (error) {
             // File does not exist, we can create one.
             const value : GitattributesOperation = { path: path, file: file, type: OperationType.Overwrite };
             return value;
@@ -311,6 +338,7 @@ async function getOperation(path : string, file: GitattributesFile) : Promise<Gi
 }
 
 export async function activate(context: vscode.ExtensionContext) : Promise<void> {
+    var bridge = constructGithubSpace();
 
     console.log('gitattributes: extension is now active!');
 
@@ -318,11 +346,17 @@ export async function activate(context: vscode.ExtensionContext) : Promise<void>
         // Check if we are in a workspace.
         if (!vscode.workspace.workspaceFolders) {
             vscode.window.showErrorMessage('No workspace open. Please open a workspace to use this command.');
-            return;
+            throw new CancellationError();
         }
 
         try {
-            var file: GitattributesFile | undefined = await vscode.window.showQuickPick(getGitattributesFiles());
+            if (typeof bridge.gitattributesRepository === 'undefined') {
+                console.log('vscode-gitattributes failed to initialize with error:\n' + 'Value of `gitattributesRepository` is typeof `undefined`.');
+                vscode.window.showErrorMessage('vscode-gitattributes failed to initialize with error:', 'Value of `gitattributesRepository` is typeof `undefined`.');
+                throw new CancellationError();
+            }
+
+            var file: GitattributesFile | undefined = await vscode.window.showQuickPick(getGitattributesFiles(bridge.gitattributesRepository));
             if (!file) {
                 // Cancel
                 throw new CancellationError();
@@ -355,7 +389,7 @@ export async function activate(context: vscode.ExtensionContext) : Promise<void>
             }
 
             // Store the file on file system.
-            var doneOperation: GitattributesOperation = await gitattributesRepository.download(operation!);
+            var doneOperation: GitattributesOperation = await bridge.gitattributesRepository.download(operation!);
 
             showSuccessMessage(doneOperation);
         } catch (reason : any) {
