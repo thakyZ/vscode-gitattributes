@@ -5,22 +5,22 @@
  * but I had too much fun in implementing it on my own.
  */
 
-import { GitattributesFile } from "./extension";
+import { GitAttributesFile } from "./extension";
 
 export class CacheItem {
     private _key: string;
-    private _value: GitattributesFile[];
+    private _value: GitAttributesFile[];
     private storeDate: Date;
 
     get key(): string {
         return this._key;
     }
 
-    get value(): GitattributesFile[] {
+    get value(): GitAttributesFile[] {
         return this._value;
     }
 
-    constructor(key: string, value: GitattributesFile[]) {
+    constructor(key: string, value: GitAttributesFile[]) {
         this._key = key;
         this._value = value;
         this.storeDate = new Date();

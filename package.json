@@ -18,7 +18,7 @@
   "homepage": "https://github.com/thakyZ/vscode-gitattributes",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.87.0"
   },
   "categories": [
     "Programming Languages",
@@ -77,26 +77,28 @@
     "package": "webpack --mode production --devtool hidden-source-map",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@octokit/openapi-types": "^19.1.0",
+    "@octokit/openapi-types": "^20.0.0",
     "@octokit/rest": "^20.0.2",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "20.x",
-    "@types/vscode": "^1.85.0",
-    "@typescript-eslint/eslint-plugin": "^6.18.1",
-    "@typescript-eslint/parser": "^6.18.1",
-    "@vscode/test-electron": "^2.3.8",
-    "eslint": "^8.56.0",
+    "@types/vscode"                   : "^1.87.0",
+    "@typescript-eslint/eslint-plugin": "^7.4.0" ,
+    "@typescript-eslint/parser"       : "^7.4.0" ,
+    "@vscode/test-electron"           : "^2.3.9" ,
+    "eslint"                          : "^8.57.0",
     "glob": "^10.3.10",
-    "mocha": "^10.2.0",
+    "mocha": "^10.4.0",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.3.3",
-    "webpack": "^5.89.0",
+    "typescript": "^5.4.3", "webpack": "^5.91.0",
     "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "@vscode/vsce": "^2.24.0"
   }
 }

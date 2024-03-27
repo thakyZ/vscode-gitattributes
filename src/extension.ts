@@ -4,35 +4,22 @@
 
 import * as vscode from 'vscode';
 import { Cache, CacheItem } from './cache';
+import { OctokitOptions, GitHubData, OctokitResponseWrapper } from './OctokitResponseWrapper';
 import { Octokit } from '@octokit/rest';
 
-import { RequestRequestOptions } from "@octokit/types";
-
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import * as fs from 'fs/promises';
+import * as fs from 'node:fs/promises';
 
 class CancellationError extends Error { }
 
 interface Bridge {
-    gitattributesRepository: GitattributesRepository | undefined;
+    gitattributesRepository: GitAttributesRepository | undefined;
     proxy : string | undefined;
 }
 
-interface OctokitOptions {
-    authStrategy?: string | undefined;
-    auth?: string | undefined;
-    userAgent?: string | undefined;
-    previews?: string[] | undefined;
-    baseUrl?: string | undefined;
-    log?: {
-        debug: (message: string) => unknown;
-        info: (message: string) => unknown;
-        warn: (message: string) => unknown;
-        error: (message: string) => unknown;
-    } | undefined;
-    request?: RequestRequestOptions | undefined;
-    timeZone?: string | undefined;
-    [option: string]: string | string[] | object | RequestRequestOptions | undefined;
+interface Operation {
+    label: string;
+    description: string;
 }
 
 enum OperationType {
@@ -40,8 +27,19 @@ enum OperationType {
     overwrite
 }
 
+interface GitAttributesOperation {
+    type: OperationType;
+    path: string;
+    file: GitAttributesFile;
+}
+
+export interface GitAttributesFile extends vscode.QuickPickItem {
+    url: string;
+}
+
 interface IError {
-    code: number | string;
+    // code: number | string;
+    status: number | string;
     message: string;
 }
 
@@ -49,41 +47,7 @@ function instanceOfIError(object: unknown): object is IError {
     return typeof object === 'object' && object !== null && 'code' in object && 'message' in object;
 }
 
-interface GitattributesOperation {
-    type: OperationType;
-    path: string;
-    file: GitattributesFile;
-}
-
-interface GitHubData {
-    type: 'dir' | 'file' | 'submodule' | 'symlink';
-    size: number;
-    name: string;
-    encoding: string;
-    path: string;
-    content?: string | undefined;
-    sha: string;
-    url: string;
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    git_url: string | null;
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    html_url: string | null;
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    download_url: string | null;
-    _links: GitHubDataLinks;
-}
-
-export interface GitHubDataLinks {
-    git: string | null;
-    html: string | null;
-    self: string;
-}
-
-export interface GitattributesFile extends vscode.QuickPickItem {
-    url: string;
-}
-
-export class GitattributesRepository {
+export class GitAttributesRepository {
     private cache: Cache;
 
     constructor(private client : Octokit) {
@@ -94,37 +58,41 @@ export class GitattributesRepository {
     /**
      * Get all .gitattributes files.
      */
-    public async getFiles(path: string = ''): Promise<GitattributesFile[]> {
+    public async getFiles(path: string = ''): Promise<GitAttributesFile[]> {
         // If cached, return from the cache.
         const item = this.cache.get('gitattributes/' + path);
-        if (item !== undefined) {
+        if (typeof item !== 'undefined') {
             return item;
         }
 
         // Download .gitattributes files from GitHub.
+        let response: OctokitResponseWrapper | undefined = undefined;
         try {
-            const response = await this.client.repos.getContent({
+            response = new OctokitResponseWrapper(await this.client.repos.getContent({
                 owner: 'alexkaratarakis',
                 repo: 'gitattributes',
                 path: path,
                 headers: {
                   accept: 'application/json',
                 }
-            });
+            }));
 
-            const responseData : GitHubData[] = response.data as unknown as GitHubData[];
+            if (typeof response === 'undefined') {
+                throw new TypeError("Type of the response is undefined.");
+            }
 
-            console.log(`vscode-gitattributes: GitHub API ratelimit remaining:
-                ${response.headers['x-ratelimit-remaining']}`);
+            const responseData: Array<GitHubData> = response.get<Array<GitHubData>>();
 
-            if (!responseData || !responseData.entries) {
+            console.log(`vscode-gitattributes: GitHub API ratelimit remaining: ${response.headers['x-ratelimit-remaining']}`);
+
+            if (typeof responseData === "undefined" || typeof responseData.entries === "undefined") {
+                console.error(JSON.stringify(response ?? {}, null, 2));
                 throw new Error('Response sent wrong type.');
             }
 
             const files = responseData.filter((file: GitHubData) => {
-                return (file.type === 'file' && file.name !== '.gitattributes' &&
-                    file.name.endsWith('.gitattributes'));
-            }).map((file : GitHubData) => {
+                return (file.type === 'file' && file.name !== '.gitattributes' && file.name.endsWith('.gitattributes'));
+            }).map((file: GitHubData) => {
                 return {
                     label: file.name.replace(/\.gitattributes/, ''),
                     description: file.path,
@@ -138,7 +106,8 @@ export class GitattributesRepository {
             return files;
         } catch (error) {
             if (instanceOfIError(error)) {
-                throw new Error(`${error.code}: ${error.message}`);
+                console.error(`JSON:\n${JSON.stringify(response?.data ?? {}, null, 2)}`);
+                throw new Error(`${error.status}: ${error.message}`);
             } else {
                 throw error;
             }
@@ -148,7 +117,7 @@ export class GitattributesRepository {
     /**
      * Downloads a .gitattributes from the repository to the path passed
      */
-    public async download(operation: GitattributesOperation): Promise<GitattributesOperation> {
+    public async download(operation: GitAttributesOperation): Promise<GitAttributesOperation> {
         const flags: string = operation.type === OperationType.overwrite ? 'w' : 'a';
         const file: fs.FileHandle = await fs.open(operation.path, flags);
 
@@ -211,7 +180,7 @@ export class GitattributesRepository {
 /**
  * Remove '* text=auto' if already present.
  */
-async function deduplicate(operation: GitattributesOperation) : Promise<string> {
+async function deduplicate(operation: GitAttributesOperation) : Promise<string> {
     let found: boolean = false;
     const newPath: string = operation.path + '.new';
     const newFile: fs.FileHandle = await fs.open(newPath, 'w');
@@ -252,7 +221,7 @@ function getAgent(agent: HttpsProxyAgent | undefined, proxy: string | undefined)
 
 function constructGithubSpace(): Bridge {
     let client: Octokit | undefined;
-    let gitattributesRepository: GitattributesRepository | undefined;
+    let gitattributesRepository: GitAttributesRepository | undefined;
     let debug: boolean | undefined;
     let httpConfig: vscode.WorkspaceConfiguration | undefined;
     let proxy : string | undefined;
@@ -312,7 +281,7 @@ function constructGithubSpace(): Bridge {
         client = new Octokit(options);
 
         // Create a gitattributes repository.
-        gitattributesRepository = new GitattributesRepository(client);
+        gitattributesRepository = new GitAttributesRepository(client);
     } catch (error) {
         console.log('vscode-gitattributes failed to initialize with error:\n' + error);
         vscode.window.showErrorMessage('vscode-gitattributes failed to initialize with error:', (error as Error).toString());
@@ -324,14 +293,11 @@ function constructGithubSpace(): Bridge {
     };
 }
 
-function getGitattributesFiles(gitattributesRepository: GitattributesRepository) {
+async function getGitattributesFiles(gitattributesRepository: GitAttributesRepository) {
     // Get list of .gitattributes files from GitHub.
-    return Promise.all([
-        gitattributesRepository.getFiles()
-    ]).then((result) => {
-        return Array.prototype.concat.apply([], result)
-               .sort((a, b) => a.label.localeCompare(b.label));
-    });
+    const result = await gitattributesRepository.getFiles();
+    return Array.prototype.concat.apply([], result)
+        .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function promptForOperation() {
@@ -347,35 +313,32 @@ function promptForOperation() {
     ]);
 }
 
-function showSuccessMessage(operation: GitattributesOperation) {
+function showSuccessMessage(operation: GitAttributesOperation) {
     switch (operation.type) {
         case OperationType.append:
-            return vscode.window.showInformationMessage(`Appended ${operation.file.description} to the existing \
-            .gitattributes in the project root`);
+            return vscode.window.showInformationMessage(`Appended ${operation.file.description} to the existing .gitattributes in the project root`);
         case OperationType.overwrite:
-            return vscode.window.showInformationMessage(`Created .gitattributes file in the project root based on \
-            ${operation.file.description}`);
+            return vscode.window.showInformationMessage(`Created .gitattributes file in the project root based on ${operation.file.description}`);
         default:
             throw new Error('Unsupported operation');
     }
 }
 
-async function getOperation(path : string, file: GitattributesFile) : Promise<GitattributesOperation | undefined> {
+async function getOperation(path : string, file: GitAttributesFile) : Promise<GitAttributesOperation | undefined> {
     try {
         // Check if file exists
         await fs.stat(path);
-        promptForOperation().then((operation : { label : string, description: string } | undefined) => {
-            if (!operation) {
-                // Cancel
-                throw new CancellationError();
-            }
-            const value : GitattributesOperation = { path: path, file: file, type: OperationType[operation.label as keyof typeof OperationType] };
-            return value;
-        });
+        const operation: Operation | undefined = await promptForOperation();
+        if (typeof operation === 'undefined') {
+            // Cancel
+            throw new CancellationError();
+        }
+        const value : GitAttributesOperation = { path: path, file: file, type: OperationType[operation.label as keyof typeof OperationType] };
+        return value;
     } catch (error) {
-        if (error) {
+        if (typeof error !== 'undefined') {
             // File does not exist, we can create one.
-            const value : GitattributesOperation = { path: path, file: file, type: OperationType.overwrite };
+            const value : GitAttributesOperation = { path: path, file: file, type: OperationType.overwrite };
             return value;
         }
     }
@@ -395,12 +358,12 @@ export async function activate(context: vscode.ExtensionContext) : Promise<void>
 
         try {
             if (typeof bridge.gitattributesRepository === 'undefined') {
-                console.log('vscode-gitattributes failed to initialize with error:\n' + 'Value of `gitattributesRepository` is typeof `undefined`.');
-                vscode.window.showErrorMessage('vscode-gitattributes failed to initialize with error:', 'Value of `gitattributesRepository` is typeof `undefined`.');
+                console.log('vscode-gitattributes failed to initialize with error:\n' + 'Value of `gitAttributesRepository` is typeof `undefined`.');
+                vscode.window.showErrorMessage('vscode-gitattributes failed to initialize with error:', 'Value of `gitAttributesRepository` is typeof `undefined`.');
                 throw new CancellationError();
             }
 
-            const file: GitattributesFile | undefined = await vscode.window.showQuickPick(getGitattributesFiles(bridge.gitattributesRepository));
+            const file: GitAttributesFile | undefined = await vscode.window.showQuickPick(getGitattributesFiles(bridge.gitattributesRepository));
             if (!file) {
                 // Cancel
                 throw new CancellationError();
@@ -431,7 +394,7 @@ export async function activate(context: vscode.ExtensionContext) : Promise<void>
                 }
             }
 
-            const operation: GitattributesOperation | undefined = await getOperation(path, file);
+            const operation: GitAttributesOperation | undefined = await getOperation(path, file);
 
             if (typeof operation === 'undefined') {
                 vscode.window.showErrorMessage('Operation returned undefined');
@@ -439,7 +402,7 @@ export async function activate(context: vscode.ExtensionContext) : Promise<void>
             }
 
             // Store the file on file system.
-            const doneOperation: GitattributesOperation = await bridge.gitattributesRepository.download(operation);
+            const doneOperation: GitAttributesOperation = await bridge.gitattributesRepository.download(operation);
 
             showSuccessMessage(doneOperation);
         } catch (reason) {
