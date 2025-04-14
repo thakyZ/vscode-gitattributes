@@ -15,7 +15,4 @@
         "MD024": false,
         "MD033": false
     },
-    "eslint.options": {
-        "overrideConfigFile": ".eslintrc.json"
-    }
 }
