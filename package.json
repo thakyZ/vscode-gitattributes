@@ -2,12 +2,13 @@
   "name": "vscode-gitattributes",
   "displayName": "gitattributes",
   "description": "A simple extension that lets you pull .gitattributes files from https://github.com/alexkaratarakis/gitattributes and create a combined .gitattributes file.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "nekoboinick",
   "icon": "icon.png",
   "galleryBanner": {
     "color": "#008080"
   },
+  "type": "commonjs",
   "repository": {
     "type": "git",
     "url": "https://github.com/thakyZ/vscode-gitattributes"
@@ -24,15 +25,12 @@
     "Programming Languages",
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:addgitattributes"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "addgitattributes",
-        "title": "Add gitattributes"
+        "title": "Add .gitattributes"
       }
     ],
     "configuration": {
